@@ -102,14 +102,15 @@ function ENT:SetPlaybackData(data, entitiesConstants)
             initialPos = nil,
             initialAng = nil,
             model = IsValid(ent) and ent:GetModel() or (self.EntitiesConstants[id] and self.EntitiesConstants[id].model),
-            class = IsValid(ent) and ent:GetClass() or (self.EntitiesConstants[id] and self.EntitiesConstants[id].class)
+            class = IsValid(ent) and ent:GetClass() or (self.EntitiesConstants[id] and self.EntitiesConstants[id].class),
+            entIndex = id
         }
     end
 
     self.status = AR_ANIMATION_STATUS.NOT_STARTED
 end
 
-function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback)
+function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
     self.PlaybackSpeed = speed or 1
     self.LoopMode = loopMode or AR_LOOP_MODE.NO_LOOP
     self.PlaybackType = playbackType or AR_PLAYBACK_TYPE.ABSOLUTE
@@ -119,10 +120,10 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     self.EasingInvert = easing_invert or false
     self.EasingOffset = easing_offset or 0
     self.ReversePlayback = reversePlayback or false
+    self.freezeOnEnd = freezeOnEnd or false
     if SERVER then
         -- Update networked variables
         self:SetNWInt("LoopMode", self.LoopMode)
-        self:SetNWBool("ReversePlayback", self.ReversePlayback)
     end
 end
 
@@ -144,14 +145,13 @@ function ENT:SetPhysicslessTeleport(state)
     if SERVER then self:SetNWBool("PhysicslessTeleport", self.PhysicslessTeleport) end
 end
 
-function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback)
+function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
     self:StopPlayback()
-    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback)
+    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
     self:SetModelPath(model)
     self:SetBoxID(boxid)
     self:SetSoundPath(soundpath)
     self:SetPhysicslessTeleport(physicsless)
-    self:SetNWBool("FreezeOnEnd", freezeonend)
     self:SetNWInt("LoopMode", loopMode or 0)
     self:SetupNumpad()
     self:StartPlayback()
@@ -188,16 +188,6 @@ function ENT:StopPlayback(forceReturn)
     ActivePlaybackBoxes[self] = nil
     -- If no boxes are playing, remove the global timer
     if table.IsEmpty(ActivePlaybackBoxes) then timer.Remove(GLOBAL_PLAYBACK_TIMER) end
-    local freezeOnEnd = self:GetNWBool("FreezeOnEnd", false)
-    if freezeOnEnd and (self.LoopMode == AR_LOOP_MODE.NO_LOOP or self.LoopMode == AR_LOOP_MODE.NO_LOOP_SMOOTH) then
-        for entIndex, _ in pairs(self.PlaybackData or {}) do
-            local ent = Entity(entIndex)
-            if IsValid(ent) then
-                local phys = ent:GetPhysicsObject()
-                if IsValid(phys) then phys:EnableMotion(false) end
-            end
-        end
-    end
 end
 
 function ENT:ReverseFrames()
@@ -219,15 +209,6 @@ function ENT:ProcessSmoothReturn()
     local progress = (CurTime() - self.SmoothReturnStartTime) / smoothReturnDuration
     if progress >= 1 then
         self.status = AR_ANIMATION_STATUS.FINISHED
-        for entIndex, info in pairs(self.AnimationInfo or {}) do
-            local ent = Entity(entIndex)
-            if IsValid(ent) then
-                ent:SetPos(info.initialPos)
-                ent:SetAngles(info.initialAng)
-                local phys = ent:GetPhysicsObject()
-                if IsValid(phys) then phys:EnableMotion(false) end
-            end
-        end
         return
     end
 
@@ -351,6 +332,15 @@ function ENT:StopPlaybackIfNeeded()
     if allEntitiesFinished then self:StopPlayback() end
 end
 
+function ENT:freezeEntityIfNeeded(info)
+    if not self.freezeOnEnd then return end
+    local ent = Entity(info.entIndex)
+    if not IsValid(ent) then return end
+    local phys = ent:GetPhysicsObject()
+    if not IsValid(phys) then return end
+    phys:EnableMotion(false)
+end
+
 function ENT:advanceFrames(amount, info)
     --ARLog("advanceFrames called: amount=" .. amount .. ", frameCount=" .. frameCount .. ", currentIndex=" .. currentFrameIndex)
     local currentFrameIndex = info.currentFrameIndex
@@ -374,8 +364,9 @@ function ENT:advanceFrames(amount, info)
         else
             --ARLog("At end, handling loop modes")
             if self.LoopMode == AR_LOOP_MODE.NO_LOOP then
-                ARLog("No loop mode, entity finished")
+                --ARLog("No loop mode, entity finished")
                 info.status = AR_ANIMATION_STATUS.FINISHED
+                self:freezeEntityIfNeeded(info)
                 return -1
             elseif self.LoopMode == AR_LOOP_MODE.PING_PONG then
                 --ARLog("Ping pong mode, reversing direction")
@@ -403,6 +394,7 @@ function ENT:advanceFrames(amount, info)
             if self.LoopMode == AR_LOOP_MODE.NO_LOOP then
                 ARLog("No loop mode, entity finished")
                 info.status = AR_ANIMATION_STATUS.FINISHED
+                self:freezeEntityIfNeeded(info)
                 return -1
             elseif self.LoopMode == AR_LOOP_MODE.PING_PONG then
                 --ARLog("Ping pong mode, reversing direction")
@@ -414,6 +406,7 @@ function ENT:advanceFrames(amount, info)
             elseif self.LoopMode == AR_LOOP_MODE.NO_LOOP_SMOOTH and info.IsOneTimeSmoothReturn then
                 --ARLog("No Loop Smooth mode, finished one-time return")
                 info.status = AR_ANIMATION_STATUS.FINISHED
+                self:freezeEntityIfNeeded(info)
                 return -1 -- Animation finished
             end
         end
@@ -496,7 +489,9 @@ function ENT:SetupEntityPlayback(entIndex)
     ent:SetCollisionGroup(COLLISION_GROUP_NONE)
     local i = info.currentFrameIndex
     local basePos = Vector(0, 0, 0)
-    if self.PlaybackType == AR_PLAYBACK_TYPE.RELATIVE and frames[1] and frames[1].pos then if info.initialPos then basePos = info.initialPos - frames[1].pos end end
+   if self.PlaybackType == AR_PLAYBACK_TYPE.RELATIVE and frames[1] and frames[1].pos and info.initialPos then
+        basePos = info.initialPos - frames[1].pos
+    end
     if ent.IsBeingPlayedBack and ent.PlaybackBox and ent.PlaybackBox ~= self then
         ent.IsBeingPlayedBack = false
         ent.PlaybackBox = nil
@@ -550,16 +545,17 @@ function interpolateFrame(frames, decimalIndex, direction)
 end
 
 function changeKey(oldKey, newKey, targetTable)
-    if oldKey == newKey then return end -- Do nothing if keys are the same
+    if oldKey == newKey then -- Do nothing if keys are the same
+        return
+    end
+
     -- Check if the old key exists in the table.
     -- If it doesn't, there's nothing to change.
     if targetTable[oldKey] ~= nil then
         -- 1. Get the value from the old key.
         local valueToMove = targetTable[oldKey]
-
         -- 2. Assign that value to the new key.
         targetTable[newKey] = valueToMove
-
         -- 3. Remove the old key.
         targetTable[oldKey] = nil
     else
@@ -568,40 +564,29 @@ function changeKey(oldKey, newKey, targetTable)
         print("Error: The old key '" .. tostring(oldKey) .. "' does not exist in the table.")
     end
 end
+
 function ENT:ProcessPlayback()
     if self.status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
         self:ProcessSmoothReturn()
         return
     end
 
-    if self.status ~= AR_ANIMATION_STATUS.PLAYING then
-        return
-    end
-
+    if self.status ~= AR_ANIMATION_STATUS.PLAYING then return end
     local now = CurTime()
-
     local entityKeys = {}
     for k in pairs(self.PlaybackData or {}) do
         table.insert(entityKeys, k)
     end
 
     for _, entIndex in ipairs(entityKeys) do
-        if not self.PlaybackData[entIndex] then
-            continue
-        end
-
+        if not self.PlaybackData[entIndex] then continue end
         local frames = self.PlaybackData[entIndex]
         local ent = Entity(entIndex)
         local currentEntIndex = entIndex
-
         if not IsValid(ent) then
             local model = self.AnimationInfo[entIndex].model
             local class = self.AnimationInfo[entIndex].class
-
-            if not class or not model then
-                continue
-            end
-
+            if not class or not model then continue end
             local initialPos = nil
             for _, frame in ipairs(frames) do
                 if frame.pos then
@@ -610,18 +595,13 @@ function ENT:ProcessPlayback()
                 end
             end
 
-            if not initialPos then
-                continue
-            end
-
+            if not initialPos then continue end
             ent = ents.Create(class)
             if not IsValid(ent) then continue end
-
             ent:SetModel(model)
             ent:SetPos(initialPos)
             ent:Spawn()
             local newEntId = ent:EntIndex()
-            
             changeKey(entIndex, newEntId, self.AnimationInfo)
             changeKey(entIndex, newEntId, self.PlaybackData)
             currentEntIndex = newEntId
@@ -630,21 +610,11 @@ function ENT:ProcessPlayback()
 
         local phys = ent:GetPhysicsObject()
         if not IsValid(phys) then continue end
-
         local info = self.AnimationInfo[currentEntIndex]
-        if not info then
-            continue
-        end
-
-        if info.status == AR_ANIMATION_STATUS.FINISHED then
-            continue
-        end
-
+        if not info then continue end
+        if info.status == AR_ANIMATION_STATUS.FINISHED then continue end
         local frameCount = info.frameCount
-        if frameCount == 0 then
-            continue
-        end
-
+        if frameCount == 0 then continue end
         local frameIndex = self:calculateNextFrame(info)
         if frameIndex == info.currentFrameIndex then continue end
         if frameIndex == -1 then
@@ -832,7 +802,6 @@ if SERVER then
         if not IsValid(ply) or not IsValid(ent) then return end
         if ent:GetClass() ~= "action_playback_box" then return end
         if ent:GetOwner() ~= ply then return end
-
         ent:EmitSound(ent.SoundPath or "buttons/button3.wav")
         ent:StartPlayback(false)
     end)

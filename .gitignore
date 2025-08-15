@@ -1,0 +1,11 @@
+.aider*
+.idea/php.xml
+.idea/vcs.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/encodings.xml
+QWEN.md
+playback.txt
+ar3.iml
+.emmyrc.json
+.idea/.gitignore

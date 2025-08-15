@@ -213,7 +213,7 @@ hook.Add("Think", "ActionRecorder_Think", function()
                 boxid = ply:GetInfo("actionrecorder_boxid") or "Box"
             end
             for _, ent in pairs(ents.GetAll()) do
-                if IsValid(ent) and not ent:IsPlayer() and not ent.ActionRecorder_Recording then
+                if IsValid(ent) and not ent:IsPlayer() and not ent.ActionRecorder_Recording and not (ply.PreviouslyRecordedEnts and ply.PreviouslyRecordedEnts[ent:EntIndex()]) then
                     if ent.GetCreator and ent:GetCreator() == ply and not IsPropControlledByOtherBox(ent, boxid) then
                         local phys = ent:GetPhysicsObject()
                         if IsValid(phys) then
@@ -258,7 +258,7 @@ function TOOL:LeftClick(trace)
             ply.ActionRecordEntsData = {}
 
             for _, ent in pairs(ents.GetAll()) do
-                if IsValid(ent) and not ent:IsPlayer() then
+                if IsValid(ent) and not ent:IsPlayer() and not (ply.PreviouslyRecordedEnts and ply.PreviouslyRecordedEnts[ent:EntIndex()]) then
                     if ent.GetCreator and ent:GetCreator() == ply and not IsPropControlledByOtherBox(ent, boxid) then
                         local phys = ent:GetPhysicsObject()
                         if IsValid(phys) then
@@ -474,6 +474,11 @@ function TOOL:RightClick(trace)
     net.WriteInt(3, 3)
     net.Send(ply)
 
+    -- Store previously recorded entities to prevent re-recording
+    ply.PreviouslyRecordedEnts = ply.PreviouslyRecordedEnts or {}
+    for id, _ in pairs(ply.ActionRecordData or {}) do
+        ply.PreviouslyRecordedEnts[id] = true
+    end
     ply.ActionRecordData = nil
     ply.ActionRecordEntsData = nil
 
