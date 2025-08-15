@@ -200,6 +200,14 @@ hook.Add("EntityRemoved", "ActionRecorder_EntityRemoved", function(ent)
     if ent.ActionRecorder_Recording then
         StopPropRecording(nil, ent)
     end
+    -- If the entity is removed by any means (undo, remover tool, cleanup),
+-- find which player had it in their "PreviouslyRecordedEnts" list and remove it.
+if SERVER then
+    local entIndex = ent:EntIndex()
+    for _, ply in ipairs(player.GetAll()) do
+        if ply.PreviouslyRecordedEnts and ply.PreviouslyRecordedEnts[entIndex] then ply.PreviouslyRecordedEnts[entIndex] = nil end
+    end
+end
 end)
 
 hook.Add("Think", "ActionRecorder_Think", function()
