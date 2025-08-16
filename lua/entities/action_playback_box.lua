@@ -32,6 +32,7 @@ function ENT:Initialize()
     self.PhysicslessTeleport = false
     self.ReversePlayback = false
     self.WasReversed = false
+    self.TeleportToEnd = false -- New flag for Teleport mode
     self.ActivationMode = AR_ACTIVATION_MODE.PLAY_RESET
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
@@ -198,13 +199,15 @@ function ENT:Use(activator, caller)
         end
     elseif activationMode == AR_ACTIVATION_MODE.TELEPORT then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
-            self:StopPlayback(false)
+            self:StopPlayback(false) -- Stop if currently playing
         else
-            -- Teleport mode: jumps to the opposite end and plays one cycle, respecting user's LoopMode, PlaybackType, and ReversePlayback settings.
-            -- Do NOT force self.LoopMode here. It should be controlled by convar.
-            -- Do NOT toggle self.ReversePlayback here. It should be controlled by convar.
-            -- Do NOT force self.PlaybackType. It should be controlled by convar.
-            self:StartPlayback(false)
+            self.TeleportToEnd = not self.TeleportToEnd -- Toggle jump direction
+            if self.TeleportToEnd then
+                self:SnapToFrame(self:GetMaxFrames()) -- Jump to end
+            else
+                self:SnapToFrame(1) -- Jump to start
+            end
+            -- Do NOT call StartPlayback here, it's a direct snap.
         end
     end
 end
@@ -339,17 +342,8 @@ function ENT:StartPlayback(reset)
         info.status = AR_ANIMATION_STATUS.PLAYING
 
         -- Reset currentFrameIndex if in TELEPORT mode, or if not in FORWARDS_BACKWARDS modes
-        if self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
-            -- For Teleport mode, jump to the opposite end
-            -- The direction of the jump depends on the effective playback direction
-            local effectiveDirection = (self.ReversePlayback and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD) * (self.PlaybackSpeed < 0 and -1 or 1)
-            if effectiveDirection > 0 then -- Playing forwards
-                info.currentFrameIndex = info.frameCount -- Jump to end
-            else -- Playing backwards
-                info.currentFrameIndex = 1 -- Jump to start
-            end
-        elseif not (self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP) then
-            -- For other modes (not forwards/backwards), reset to start/end based on speed
+        -- Reset currentFrameIndex if not in FORWARDS_BACKWARDS modes (and not TELEPORT mode, as it's handled by SnapToFrame)
+        if not (self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP or self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT) then
             info.currentFrameIndex = self.PlaybackSpeed >= 0 and 1 or info.frameCount
         end
 
@@ -426,6 +420,30 @@ function ENT:StopPlaybackIfNeeded()
     end
 
     if allEntitiesFinished then self:StopPlayback(false) end
+end
+
+function ENT:SnapToFrame(frameIndex)
+    if not self.PlaybackData or table.IsEmpty(self.PlaybackData) then return end
+
+    local entIndex = next(self.PlaybackData) -- Get the first entity's index
+    if not entIndex then return end
+
+    local frames = self.PlaybackData[entIndex]
+    if not frames or #frames == 0 then return end
+
+    local frame = frames[frameIndex]
+    if not frame or not frame.pos or not frame.ang then return end
+
+    local ent = Entity(entIndex)
+    if not IsValid(ent) then return end
+
+    local basePos = Vector(0, 0, 0)
+    if self.PlaybackType == AR_PLAYBACK_TYPE.RELATIVE and frames[1] and frames[1].pos and self.AnimationInfo[entIndex] and self.AnimationInfo[entIndex].initialPos then
+        basePos = self.AnimationInfo[entIndex].initialPos - frames[1].pos
+    end
+
+    ent:SetPos(frame.pos + basePos)
+    ent:SetAngles(frame.ang)
 end
 
 function ENT:freezeEntityIfNeeded(info)
