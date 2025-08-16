@@ -738,7 +738,7 @@ if CLIENT then
         local fontID = "DermaLarge"
         surface.SetFont(fontID)
         local idTextWidth = surface.GetTextSize(id)
-        local boxWidth = math.max(200, 52 + idTextWidth + 31) -- Adjusted width calculation
+        local boxWidth = math.max(200, 52 + idTextWidth + 32 + 10) -- Adjusted width calculation for bigger icon
         local boxHeight = 70
         draw.RoundedBox(8, -boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, backgroundColor)
         local iconSize = 32
@@ -785,16 +785,16 @@ if CLIENT then
 
         -- Play/Stop Icon
         local status = self:GetNWInt("Status", AR_ANIMATION_STATUS.NOT_STARTED)
-        local statusIconPath = "icon16/control_stop.png"
+        local statusIconPath = "icon16/control_stop_blue.png"
         if status == AR_ANIMATION_STATUS.PLAYING or status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
-            statusIconPath = "icon16/control_play.png"
+            statusIconPath = "icon16/control_play_blue.png"
         end
 
         local statusMat = Material(statusIconPath)
         if statusMat and not statusMat:IsError() then
-            local statusIconSize = 16
+            local statusIconSize = 32
             local statusIconX = boxWidth / 2 - statusIconSize - 5
-            local statusIconY = -boxHeight / 2 + 5
+            local statusIconY = -statusIconSize / 2 - 10
             surface.SetDrawColor(255, 255, 255, 255)
             surface.SetMaterial(statusMat)
             surface.DrawTexturedRect(statusIconX, statusIconY, statusIconSize, statusIconSize)
