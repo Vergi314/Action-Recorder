@@ -16,7 +16,7 @@ function ENT:Initialize()
     self.PlaybackData = {}
     self.PlaybackSpeed = 1
     self.LoopMode = AR_LOOP_MODE.NO_LOOP
-    self.PlaybackDirection = AR_PLAYBACK_DIRECTION.FORWARD
+    
     self.PlaybackType = AR_PLAYBACK_TYPE.ABSOLUTE
     self.Easing = "None"
     self.EasingAmplitude = 1
@@ -127,6 +127,8 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     self.freezeOnEnd = freezeOnEnd or false
     self.ActivationMode = activation_mode or AR_ACTIVATION_MODE.PLAY_RESET
 
+    
+
     if SERVER then
         -- Update networked variables
         self:SetNWInt("LoopMode", self.LoopMode)
@@ -169,6 +171,7 @@ function ENT:Use(activator, caller)
     self:EmitSound(self.SoundPath or "buttons/button3.wav")
 
     local activationMode = self.ActivationMode
+    self.ActivationMode = activationMode -- Update member variable
 
     if activationMode == AR_ACTIVATION_MODE.PLAY_RESET then
         self:StartPlayback(true)
@@ -180,17 +183,25 @@ function ENT:Use(activator, caller)
         end
     
     elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
-        if self.status ~= AR_ANIMATION_STATUS.PLAYING then
-            -- Toggle the playback direction
-            self.ReversePlayback = not self.ReversePlayback
-            self:StartPlayback(false)
-        end
+        -- Always toggle direction and start/continue playing
+        self.ReversePlayback = not self.ReversePlayback
+        self:StartPlayback(false)
     elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(false)
         else
             -- Toggle the playback direction
             self.ReversePlayback = not self.ReversePlayback
+            self:StartPlayback(false)
+        end
+    elseif activationMode == AR_ACTIVATION_MODE.TELEPORT then
+        if self.status == AR_ANIMATION_STATUS.PLAYING then
+            self:StopPlayback(false)
+        else
+            -- Teleport mode: forces LOOP mode and ABSOLUTE playback type for jumping behavior
+            self.LoopMode = AR_LOOP_MODE.LOOP
+            self.PlaybackType = AR_PLAYBACK_TYPE.ABSOLUTE
+            self.ReversePlayback = not self.ReversePlayback -- Still toggle direction
             self:StartPlayback(false)
         end
     end
@@ -317,14 +328,22 @@ function ENT:StartPlayback(reset)
     self.LastFrameTime = CurTime()
     self.status = AR_ANIMATION_STATUS.PLAYING
     if SERVER then self:SetNWInt("Status", self.status) end
-    self.PlaybackDirection = self.ReversePlayback and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD
+    
+
     self.IsActivated = true
     -- Add this box to the active playback boxes
     ActivePlaybackBoxes[self] = true
     for _, info in pairs(self.AnimationInfo) do
         info.status = AR_ANIMATION_STATUS.PLAYING
-        info.currentFrameIndex = self.PlaybackSpeed >= 0 and 1 or info.frameCount
-        info.direction = self.PlaybackSpeed >= 0 and self.PlaybackDirection or -1 * self.PlaybackDirection
+
+        -- Only reset currentFrameIndex if not in FORWARDS_BACKWARDS modes or if in TELEPORT mode
+        if not (self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP) or self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
+            info.currentFrameIndex = self.PlaybackSpeed >= 0 and 1 or info.frameCount
+        end
+
+        -- info.direction should always be FORWARD, as ReverseFrames handles the actual reversal of data.
+        info.direction = AR_PLAYBACK_DIRECTION.FORWARD
+
         info.LastMoveTime = CurTime()
         info.IsOneTimeSmoothReturn = false
     end
@@ -575,7 +594,7 @@ function ENT:SetupEntityPlayback(entIndex)
 end
 
 function ENT:calculateDirection()
-    return self.PlaybackDirection * (self.PlaybackSpeed < 0 and -1 or 1)
+    return (self.ReversePlayback and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD) * (self.PlaybackSpeed < 0 and -1 or 1)
 end
 
 function interpolateFrame(frames, decimalIndex, direction)

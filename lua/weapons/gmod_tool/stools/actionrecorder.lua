@@ -614,6 +614,7 @@ function TOOL.BuildCPanel(panel)
     activation_mode_combo:AddChoice("Play/Stop", 1)
     activation_mode_combo:AddChoice("Forwards/Backwards", 2)
     activation_mode_combo:AddChoice("Forwards/Backwards (Start/Stop)", 3)
+    activation_mode_combo:AddChoice("Teleport", 4) -- New mode
     activation_mode_combo.OnChange = function(self, index, value, data)
         RunConsoleCommand("actionrecorder_activation_mode", self:GetOptionData(index))
     end
