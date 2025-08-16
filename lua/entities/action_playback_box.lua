@@ -34,6 +34,7 @@ function ENT:Initialize()
     self.WasReversed = false
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
+        self:SetNWInt("Status", self.status)
         self:SetupNumpad()
         ActionRecorder.Wire.SetupEntity(self)
     end
@@ -108,6 +109,7 @@ function ENT:SetPlaybackData(data, entitiesConstants)
     end
 
     self.status = AR_ANIMATION_STATUS.NOT_STARTED
+    if SERVER then self:SetNWInt("Status", self.status) end
 end
 
 function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
@@ -182,6 +184,7 @@ function ENT:StopPlayback(forceReturn)
     else
         self.status = AR_ANIMATION_STATUS.FINISHED
     end
+    if SERVER then self:SetNWInt("Status", self.status) end
 
     self.IsActivated = false
     -- Remove this box from the active playback boxes
@@ -209,6 +212,7 @@ function ENT:ProcessSmoothReturn()
     local progress = (CurTime() - self.SmoothReturnStartTime) / smoothReturnDuration
     if progress >= 1 then
         self.status = AR_ANIMATION_STATUS.FINISHED
+        if SERVER then self:SetNWInt("Status", self.status) end
         return
     end
 
@@ -256,6 +260,7 @@ function ENT:StartPlayback()
 
     self.LastFrameTime = CurTime()
     self.status = AR_ANIMATION_STATUS.PLAYING
+    if SERVER then self:SetNWInt("Status", self.status) end
     self.PlaybackDirection = AR_PLAYBACK_DIRECTION.FORWARD
     self.IsActivated = true
     -- Add this box to the active playback boxes
@@ -731,10 +736,9 @@ if CLIENT then
         end
 
         local fontID = "DermaLarge"
-        local paddingX = 25
         surface.SetFont(fontID)
         local idTextWidth = surface.GetTextSize(id)
-        local boxWidth = math.max(200, idTextWidth + paddingX * 2)
+        local boxWidth = math.max(200, 52 + idTextWidth + 31) -- Adjusted width calculation
         local boxHeight = 70
         draw.RoundedBox(8, -boxWidth / 2, -boxHeight / 2, boxWidth, boxHeight, backgroundColor)
         local iconSize = 32
@@ -777,6 +781,23 @@ if CLIENT then
             surface.SetDrawColor(255, 255, 255, 255)
             surface.SetMaterial(loopMat)
             surface.DrawTexturedRect(loopIconX, loopIconY, loopIconSize, loopIconSize)
+        end
+
+        -- Play/Stop Icon
+        local status = self:GetNWInt("Status", AR_ANIMATION_STATUS.NOT_STARTED)
+        local statusIconPath = "icon16/control_stop.png"
+        if status == AR_ANIMATION_STATUS.PLAYING or status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
+            statusIconPath = "icon16/control_play.png"
+        end
+
+        local statusMat = Material(statusIconPath)
+        if statusMat and not statusMat:IsError() then
+            local statusIconSize = 16
+            local statusIconX = boxWidth / 2 - statusIconSize - 5
+            local statusIconY = -boxHeight / 2 + 5
+            surface.SetDrawColor(255, 255, 255, 255)
+            surface.SetMaterial(statusMat)
+            surface.DrawTexturedRect(statusIconX, statusIconY, statusIconSize, statusIconSize)
         end
 
         local fontOwner = "DermaDefault"
