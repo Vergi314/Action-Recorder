@@ -211,7 +211,10 @@ function ENT:StopPlayback(forceReturn)
     if self.status ~= AR_ANIMATION_STATUS.PLAYING and not forceReturn then return end
 
     if forceReturn then
-        self:SnapToInitialPositions()
+        -- Only snap to initial positions if not relative playback
+        if self.PlaybackType ~= AR_PLAYBACK_TYPE.RELATIVE then
+            self:SnapToInitialPositions()
+        end
     end
     if self.LoopMode == AR_LOOP_MODE.NO_LOOP and not forceReturn then
         self.status = AR_ANIMATION_STATUS.SMOOTH_RETURN
@@ -292,7 +295,9 @@ function ENT:StartPlayback(reset)
     --ARLog("PlaybackData contains: " .. table.Count(self.PlaybackData or {}) .. " entities")
 
     -- Capture initial positions/angles when playback starts
-    if self.status ~= AR_ANIMATION_STATUS.PLAYING then -- Only capture if not already playing
+    -- For relative playback, always update initial position to current entity position
+    -- For absolute playback, only capture if not already playing (to maintain original start point)
+    if self.PlaybackType == AR_PLAYBACK_TYPE.RELATIVE or self.status ~= AR_ANIMATION_STATUS.PLAYING then
         for entIndex, frames in pairs(self.PlaybackData or {}) do
             local ent = Entity(entIndex)
             if IsValid(ent) then
