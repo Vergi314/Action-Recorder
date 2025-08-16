@@ -170,7 +170,7 @@ function ENT:Use(activator, caller)
     if not self.PlaybackData then return end
     self:EmitSound(self.SoundPath or "buttons/button3.wav")
 
-    local activationMode = self.ActivationMode
+    local activationMode = GetConVar("actionrecorder_activation_mode"):GetInt()
     self.ActivationMode = activationMode -- Update member variable
 
     if activationMode == AR_ACTIVATION_MODE.PLAY_RESET then
@@ -183,25 +183,27 @@ function ENT:Use(activator, caller)
         end
     
     elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
-        -- Always toggle direction and start/continue playing
-        self.ReversePlayback = not self.ReversePlayback
+        -- Toggle explicit direction flag for this mode
+        self.ShouldPlayBackwards = not (self.ShouldPlayBackwards or false) -- Initialize to false if nil
+        self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
         self:StartPlayback(false)
     elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(false)
         else
-            -- Toggle the playback direction
-            self.ReversePlayback = not self.ReversePlayback
+            -- Toggle explicit direction flag for this mode
+            self.ShouldPlayBackwards = not (self.ShouldPlayBackwards or false) -- Initialize to false if nil
+            self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
             self:StartPlayback(false)
         end
     elseif activationMode == AR_ACTIVATION_MODE.TELEPORT then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(false)
         else
-            -- Teleport mode: forces LOOP mode and ABSOLUTE playback type for jumping behavior
-            self.LoopMode = AR_LOOP_MODE.LOOP
-            self.PlaybackType = AR_PLAYBACK_TYPE.ABSOLUTE
-            self.ReversePlayback = not self.ReversePlayback -- Still toggle direction
+            -- Teleport mode: jumps to the opposite end and plays one cycle, respecting user's LoopMode, PlaybackType, and ReversePlayback settings.
+            -- Do NOT force self.LoopMode here. It should be controlled by convar.
+            -- Do NOT toggle self.ReversePlayback here. It should be controlled by convar.
+            -- Do NOT force self.PlaybackType. It should be controlled by convar.
             self:StartPlayback(false)
         end
     end
@@ -336,13 +338,27 @@ function ENT:StartPlayback(reset)
     for _, info in pairs(self.AnimationInfo) do
         info.status = AR_ANIMATION_STATUS.PLAYING
 
-        -- Only reset currentFrameIndex if not in FORWARDS_BACKWARDS modes or if in TELEPORT mode
-        if not (self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP) or self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
+        -- Reset currentFrameIndex if in TELEPORT mode, or if not in FORWARDS_BACKWARDS modes
+        if self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
+            -- For Teleport mode, jump to the opposite end
+            -- The direction of the jump depends on the effective playback direction
+            local effectiveDirection = (self.ReversePlayback and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD) * (self.PlaybackSpeed < 0 and -1 or 1)
+            if effectiveDirection > 0 then -- Playing forwards
+                info.currentFrameIndex = info.frameCount -- Jump to end
+            else -- Playing backwards
+                info.currentFrameIndex = 1 -- Jump to start
+            end
+        elseif not (self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP) then
+            -- For other modes (not forwards/backwards), reset to start/end based on speed
             info.currentFrameIndex = self.PlaybackSpeed >= 0 and 1 or info.frameCount
         end
 
-        -- info.direction should always be FORWARD, as ReverseFrames handles the actual reversal of data.
-        info.direction = AR_PLAYBACK_DIRECTION.FORWARD
+        -- Set info.direction based on self.ShouldPlayBackwards for FORWARDS_BACKWARDS modes, otherwise FORWARD.
+        if self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS or self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
+            info.direction = self.ShouldPlayBackwards and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD
+        else
+            info.direction = AR_PLAYBACK_DIRECTION.FORWARD
+        end
 
         info.LastMoveTime = CurTime()
         info.IsOneTimeSmoothReturn = false
