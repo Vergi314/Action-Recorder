@@ -148,7 +148,7 @@ function ENT:SetPhysicslessTeleport(state)
 end
 
 function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
-    self:StopPlayback()
+    self:StopPlayback(true)
     self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
     self:SetModelPath(model)
     self:SetBoxID(boxid)
@@ -334,7 +334,7 @@ function ENT:StopPlaybackIfNeeded()
         end
     end
 
-    if allEntitiesFinished then self:StopPlayback() end
+    if allEntitiesFinished then self:StopPlayback(true) end
 end
 
 function ENT:freezeEntityIfNeeded(info)
@@ -785,9 +785,10 @@ if CLIENT then
 
         -- Play/Stop Icon
         local status = self:GetNWInt("Status", AR_ANIMATION_STATUS.NOT_STARTED)
-        local statusIconPath = "icon16/control_stop_blue.png"
         if status == AR_ANIMATION_STATUS.PLAYING or status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
             statusIconPath = "icon16/control_play_blue.png"
+        else
+            statusIconPath = "icon16/control_stop_blue.png"
         end
 
         local statusMat = Material(statusIconPath)
