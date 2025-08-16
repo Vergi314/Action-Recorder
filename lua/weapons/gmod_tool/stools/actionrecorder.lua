@@ -27,7 +27,8 @@ if SERVER then
 	CreateConVar("actionrecorder_labelcolor_b", "255", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
     CreateConVar("actionrecorder_labelcolor_a", "255", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 	CreateConVar("actionrecorder_labelcolor_rainbow", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
-	CreateConVar("actionrecorder_reverseplayback", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
+	    CreateConVar("actionrecorder_reverseplayback", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
+    CreateConVar("actionrecorder_activation_mode", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 else
     CreateClientConVar("actionrecorder_playbackspeed", "1", true, true)
     CreateClientConVar("actionrecorder_loop", "0", true, true)
@@ -49,6 +50,7 @@ else
     CreateClientConVar("actionrecorder_labelcolor_a", "255", true, false)
 	CreateClientConVar("actionrecorder_labelcolor_rainbow", "0", true, false)
 	CreateClientConVar("actionrecorder_reverseplayback", "0", true, true)
+	CreateClientConVar("actionrecorder_activation_mode", "0", true, true)
 end
 
 if SERVER then
@@ -329,7 +331,7 @@ function TOOL:RightClick(trace)
     local easing, easing_amplitude, easing_frequency, easing_invert, easing_offset
     local physicsless, freezeonend
     local label_r, label_g, label_b, label_a, label_rainbow
-    local reversePlayback
+    local reversePlayback, activation_mode
 
     -- Global settings are only used on a listen server (not dedicated), when global mode is on, and for the host (admin).
     local useGlobalSettings = not isDedicated and globalMode and ply:IsAdmin()
@@ -349,6 +351,7 @@ function TOOL:RightClick(trace)
         easing_offset = GetConVar("actionrecorder_easing_offset"):GetFloat()
         freezeonend = GetConVar("actionrecorder_freezeonend"):GetBool()
         reversePlayback = GetConVar("actionrecorder_reverseplayback"):GetBool()
+        activation_mode = GetConVar("actionrecorder_activation_mode"):GetInt()
     else
         -- Everyone on a dedicated server, or non-admins on a listen server, use their own settings
         speed = ply:GetInfoNum("actionrecorder_playbackspeed", 1)
@@ -364,6 +367,7 @@ function TOOL:RightClick(trace)
         easing_offset = ply:GetInfoNum("actionrecorder_easing_offset", 0)
         freezeonend = ply:GetInfoNum("actionrecorder_freezeonend", 0) == 1
         reversePlayback = ply:GetInfoNum("actionrecorder_reverseplayback", 0) == 1
+        activation_mode = ply:GetInfoNum("actionrecorder_activation_mode", 0)
     end
 
     -- These settings are always per-player
@@ -412,7 +416,7 @@ function TOOL:RightClick(trace)
         found_box_owned:UpdateSettings(
             speed, loop, playbackType, model, boxid, soundpath,
             easing, easing_amplitude, easing_frequency, easing_invert, easing_offset,
-            physicsless, freezeonend, reversePlayback
+            physicsless, freezeonend, reversePlayback, activation_mode
         )
         found_box_owned.NumpadKey = key
         found_box_owned:SetPhysicslessTeleport(physicsless)
@@ -452,7 +456,7 @@ function TOOL:RightClick(trace)
     ent:SetPlaybackData(ply.ActionRecordData, ply.ActionRecordEntsData)
     ent:SetPlaybackSettings(
         speed, loop, playbackType,
-        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback
+        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback, activation_mode
     )
     ent:SetModelPath(model)
     ent:SetBoxID(boxid)
@@ -604,6 +608,14 @@ function TOOL.BuildCPanel(panel)
     loop_combo:AddChoice("No Loop (Smooth)", 3)
     loop_combo.OnChange = function(self, index, value, data)
         RunConsoleCommand("actionrecorder_loop", self:GetOptionData(index))
+    end
+    local activation_mode_combo = generalSettingsForm:ComboBox("Activation Mode", "actionrecorder_activation_mode")
+    activation_mode_combo:AddChoice("Play/Reset", 0, true)
+    activation_mode_combo:AddChoice("Play/Stop", 1)
+    activation_mode_combo:AddChoice("Forwards/Backwards", 2)
+    activation_mode_combo:AddChoice("Forwards/Backwards (Start/Stop)", 3)
+    activation_mode_combo.OnChange = function(self, index, value, data)
+        RunConsoleCommand("actionrecorder_activation_mode", self:GetOptionData(index))
     end
     local combo = generalSettingsForm:ComboBox("Playback Type", "actionrecorder_playbacktype")
     combo:AddChoice("absolute", "absolute", true)

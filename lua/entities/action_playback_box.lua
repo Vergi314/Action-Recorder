@@ -32,9 +32,11 @@ function ENT:Initialize()
     self.PhysicslessTeleport = false
     self.ReversePlayback = false
     self.WasReversed = false
+    self.ActivationMode = AR_ACTIVATION_MODE.PLAY_RESET
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
         self:SetNWInt("Status", self.status)
+        self:SetNWInt("ActivationMode", self.ActivationMode)
         self:SetupNumpad()
         ActionRecorder.Wire.SetupEntity(self)
     end
@@ -112,7 +114,7 @@ function ENT:SetPlaybackData(data, entitiesConstants)
     if SERVER then self:SetNWInt("Status", self.status) end
 end
 
-function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
+function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
     self.PlaybackSpeed = speed or 1
     self.LoopMode = loopMode or AR_LOOP_MODE.NO_LOOP
     self.PlaybackType = playbackType or AR_PLAYBACK_TYPE.ABSOLUTE
@@ -121,11 +123,14 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     self.EasingFrequency = easing_frequency or 1
     self.EasingInvert = easing_invert or false
     self.EasingOffset = easing_offset or 0
-    self.ReversePlayback = reversePlayback or false
+    self.ReversePlayback = reversePlayback or false -- Directly use the passed parameter
     self.freezeOnEnd = freezeOnEnd or false
+    self.ActivationMode = activation_mode or AR_ACTIVATION_MODE.PLAY_RESET
+
     if SERVER then
         -- Update networked variables
         self:SetNWInt("LoopMode", self.LoopMode)
+        self:SetNWInt("ActivationMode", self.ActivationMode)
     end
 end
 
@@ -147,9 +152,9 @@ function ENT:SetPhysicslessTeleport(state)
     if SERVER then self:SetNWBool("PhysicslessTeleport", self.PhysicslessTeleport) end
 end
 
-function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
+function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
     self:StopPlayback(true)
-    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback)
+    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
     self:SetModelPath(model)
     self:SetBoxID(boxid)
     self:SetSoundPath(soundpath)
@@ -162,7 +167,33 @@ end
 function ENT:Use(activator, caller)
     if not self.PlaybackData then return end
     self:EmitSound(self.SoundPath or "buttons/button3.wav")
-    self:StartPlayback(false)
+
+    local activationMode = self.ActivationMode
+
+    if activationMode == AR_ACTIVATION_MODE.PLAY_RESET then
+        self:StartPlayback(true)
+    elseif activationMode == AR_ACTIVATION_MODE.PLAY_STOP then
+        if self.status == AR_ANIMATION_STATUS.PLAYING then
+            self:StopPlayback(true)
+        else
+            self:StartPlayback(false)
+        end
+    
+    elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
+        if self.status ~= AR_ANIMATION_STATUS.PLAYING then
+            -- Toggle the playback direction
+            self.ReversePlayback = not self.ReversePlayback
+            self:StartPlayback(false)
+        end
+    elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
+        if self.status == AR_ANIMATION_STATUS.PLAYING then
+            self:StopPlayback(false)
+        else
+            -- Toggle the playback direction
+            self.ReversePlayback = not self.ReversePlayback
+            self:StartPlayback(false)
+        end
+    end
 end
 
 local function IsPropControlledByOtherBox(prop, myBox)
@@ -178,6 +209,10 @@ end
 
 function ENT:StopPlayback(forceReturn)
     if self.status ~= AR_ANIMATION_STATUS.PLAYING and not forceReturn then return end
+
+    if forceReturn then
+        self:SnapToInitialPositions()
+    end
     if self.LoopMode == AR_LOOP_MODE.NO_LOOP and not forceReturn then
         self.status = AR_ANIMATION_STATUS.SMOOTH_RETURN
         self.SmoothReturnStartTime = CurTime()
@@ -191,6 +226,16 @@ function ENT:StopPlayback(forceReturn)
     ActivePlaybackBoxes[self] = nil
     -- If no boxes are playing, remove the global timer
     if table.IsEmpty(ActivePlaybackBoxes) then timer.Remove(GLOBAL_PLAYBACK_TIMER) end
+end
+
+function ENT:SnapToInitialPositions()
+    for entIndex, info in pairs(self.AnimationInfo or {}) do
+        local ent = Entity(entIndex)
+        if IsValid(ent) and info.initialPos and info.initialAng then
+            ent:SetPos(info.initialPos)
+            ent:SetAngles(info.initialAng)
+        end
+    end
 end
 
 function ENT:ReverseFrames()
@@ -231,16 +276,20 @@ function ENT:ProcessSmoothReturn()
     end
 end
 
-function ENT:StartPlayback()
-    --ARLog("StartPlayback called")
-    --ARLog("PlaybackData contains: " .. table.Count(self.PlaybackData or {}) .. " entities")
-    -- Check if we need to reverse the frames
+function ENT:StartPlayback(reset)
+    if reset then
+        self:ResetPlayback()
+    end
+
     local shouldReverse = self.ReversePlayback
     if shouldReverse and not self.WasReversed then
         self:ReverseFrames()
     elseif not shouldReverse and self.WasReversed then
         self:ReverseFrames() -- Reverse again to get back to original
     end
+
+    --ARLog("StartPlayback called")
+    --ARLog("PlaybackData contains: " .. table.Count(self.PlaybackData or {}) .. " entities")
 
     -- Capture initial positions/angles when playback starts
     if self.status ~= AR_ANIMATION_STATUS.PLAYING then -- Only capture if not already playing
@@ -252,16 +301,18 @@ function ENT:StartPlayback()
                     info.initialPos = ent:GetPos()
                     ARLog("Entity " .. entIndex .. " initial pos: ", info.initialPos)
                     info.initialAng = ent:GetAngles()
+                    ARLog("Entity " .. entIndex .. " initial ang: ", info.initialAng)
                     ARLog("Entity " .. entIndex .. " frame count: ", info.frameCount)
                 end
             end
         end
     end
 
+
     self.LastFrameTime = CurTime()
     self.status = AR_ANIMATION_STATUS.PLAYING
     if SERVER then self:SetNWInt("Status", self.status) end
-    self.PlaybackDirection = AR_PLAYBACK_DIRECTION.FORWARD
+    self.PlaybackDirection = self.ReversePlayback and AR_PLAYBACK_DIRECTION.REVERSE or AR_PLAYBACK_DIRECTION.FORWARD
     self.IsActivated = true
     -- Add this box to the active playback boxes
     ActivePlaybackBoxes[self] = true
@@ -334,7 +385,7 @@ function ENT:StopPlaybackIfNeeded()
         end
     end
 
-    if allEntitiesFinished then self:StopPlayback(true) end
+    if allEntitiesFinished then self:StopPlayback(false) end
 end
 
 function ENT:freezeEntityIfNeeded(info)
@@ -785,7 +836,7 @@ if CLIENT then
 
         -- Play/Stop Icon
         local status = self:GetNWInt("Status", AR_ANIMATION_STATUS.NOT_STARTED)
-        if status == AR_ANIMATION_STATUS.PLAYING or status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
+        if status == AR_ANIMATION_STATUS.PLAYING then
             statusIconPath = "icon16/control_play_blue.png"
         else
             statusIconPath = "icon16/control_stop_blue.png"
@@ -868,7 +919,7 @@ function ENT:TriggerInput(iname, value)
                 ActionRecorder.Wire.Error(self, "Invalid loop mode: " .. tostring(val))
             end
         end,
-        ["Reset"] = function(val) if val ~= 0 then self:ResetPlayback() end end,
+        ["Reset"] = function(val) if val ~= 0 then self:ResetPlaybackForWire() end end,
         ["SetFrame"] = function(val)
             if 0 == val then return end
             --ARLog("SetFrame input val is ", val)
@@ -893,6 +944,16 @@ function ENT:Think()
 end
 
 function ENT:ResetPlayback()
+    self:StopPlayback(true)
+    for _, info in pairs(self.AnimationInfo or {}) do
+        if info then
+            info.currentFrameIndex = 1
+            info.status = AR_ANIMATION_STATUS.NOT_STARTED
+        end
+    end
+end
+
+function ENT:ResetPlaybackForWire()
     --ARLog("ResetPlayback called via wire input")
     self:StopPlayback(true)
     -- Reset all animation info to frame 1
