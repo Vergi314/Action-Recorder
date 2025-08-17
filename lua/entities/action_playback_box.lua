@@ -34,6 +34,7 @@ function ENT:Initialize()
     self.WasReversed = false
     self.TeleportToEnd = false -- New flag for Teleport mode
     self.ActivationMode = AR_ACTIVATION_MODE.PLAY_RESET
+    self.NextTeleportTime = nil
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
         self:SetNWInt("Status", self.status)
@@ -183,7 +184,6 @@ function ENT:Use(activator, caller)
     elseif self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
         -- Toggle explicit direction flag for this mode
         self.ShouldPlayBackwards = not (self.ShouldPlayBackwards or false) -- Initialize to false if nil
-        self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
         self:StartPlayback(false)
     elseif self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
@@ -191,20 +191,13 @@ function ENT:Use(activator, caller)
         else
             -- Toggle explicit direction flag for this mode
             self.ShouldPlayBackwards = not (self.ShouldPlayBackwards or false) -- Initialize to false if nil
-            self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
             self:StartPlayback(false)
         end
     elseif self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
-            self:StopPlayback(false) -- Stop if currently playing
+            self:StopPlayback(true) -- Stop if currently playing
         else
-            self.TeleportToEnd = not self.TeleportToEnd -- Toggle jump direction
-            if self.TeleportToEnd then
-                self:SnapToFrame(self:GetMaxFrames()) -- Jump to end
-            else
-                self:SnapToFrame(1) -- Jump to start
-            end
-            -- Do NOT call StartPlayback here, it's a direct snap.
+            self:StartPlayback(false)
         end
     end
 end
@@ -222,6 +215,8 @@ end
 
 function ENT:StopPlayback(forceReturn)
     if self.status ~= AR_ANIMATION_STATUS.PLAYING and not forceReturn then return end
+
+    self.NextTeleportTime = nil
 
     if forceReturn then
         -- Only snap to initial positions if not relative playback
@@ -295,6 +290,10 @@ end
 function ENT:StartPlayback(reset)
     if reset then
         self:ResetPlayback()
+    end
+
+    if self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
+        self.NextTeleportTime = CurTime()
     end
 
     local shouldReverse = self.ReversePlayback
@@ -683,6 +682,24 @@ function ENT:ProcessPlayback()
     end
 
     if self.status ~= AR_ANIMATION_STATUS.PLAYING then return end
+
+    if self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
+        local delay = 1 / self.PlaybackSpeed
+        if delay <= 0 then delay = 1 end
+
+        if not self.NextTeleportTime or CurTime() >= self.NextTeleportTime then
+            self.TeleportToEnd = not (self.TeleportToEnd or false)
+            local frameToSnap = self.TeleportToEnd and self:GetMaxFrames() or 1
+            self:SnapToFrame(frameToSnap)
+            self.NextTeleportTime = CurTime() + delay
+
+            if self.LoopMode == AR_LOOP_MODE.NO_LOOP or self.LoopMode == AR_LOOP_MODE.NO_LOOP_SMOOTH then
+                self:StopPlayback(false)
+            end
+        end
+        return
+    end
+
     local now = CurTime()
     local entityKeys = {}
     for k in pairs(self.PlaybackData or {}) do
