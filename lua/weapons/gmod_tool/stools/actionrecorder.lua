@@ -9,6 +9,7 @@ if CLIENT then
 end
 
 if SERVER then
+    CreateConVar("actionrecorder_freezeonpause", "0", {FCVAR_ARCHIVE, FCVAR_REPLICATED})
     CreateConVar("actionrecorder_playbackspeed", "1", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
     CreateConVar("actionrecorder_loop", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 	CreateConVar("actionrecorder_freezeonend", "0", {FCVAR_ARCHIVE, FCVAR_REPLICATED})
@@ -31,6 +32,8 @@ if SERVER then
     CreateConVar("actionrecorder_unpauseinreverse", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
     CreateConVar("actionrecorder_activation_mode", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 else
+    CreateClientConVar("actionrecorder_freezeonpause", "0", true, true)
+    CreateClientConVar("actionrecorder_pausekey", "0", true, true)
     CreateClientConVar("actionrecorder_playbackspeed", "1", true, true)
     CreateClientConVar("actionrecorder_loop", "0", true, true)
 	CreateClientConVar("actionrecorder_freezeonend", "0", true, true)
@@ -331,7 +334,7 @@ function TOOL:RightClick(trace)
 
     local speed, loop, playbackType, model, boxid, key, soundpath
     local easing, easing_amplitude, easing_frequency, easing_invert, easing_offset
-    local physicsless, freezeonend
+    local physicsless, freezeonend, freezeonpause
     local label_r, label_g, label_b, label_a, label_rainbow
     local reversePlayback, activation_mode, unpauseInReverse
 
@@ -352,6 +355,7 @@ function TOOL:RightClick(trace)
         easing_invert = GetConVar("actionrecorder_easing_invert"):GetBool()
         easing_offset = GetConVar("actionrecorder_easing_offset"):GetFloat()
         freezeonend = GetConVar("actionrecorder_freezeonend"):GetBool()
+        freezeonpause = GetConVar("actionrecorder_freezeonpause"):GetBool()
         reversePlayback = GetConVar("actionrecorder_reverseplayback"):GetBool()
         unpauseInReverse = GetConVar("actionrecorder_unpauseinreverse"):GetBool()
         activation_mode = GetConVar("actionrecorder_activation_mode"):GetInt()
@@ -369,6 +373,7 @@ function TOOL:RightClick(trace)
         easing_invert = ply:GetInfoNum("actionrecorder_easing_invert", 0) == 1
         easing_offset = ply:GetInfoNum("actionrecorder_easing_offset", 0)
         freezeonend = ply:GetInfoNum("actionrecorder_freezeonend", 0) == 1
+        freezeonpause = ply:GetInfoNum("actionrecorder_freezeonpause", 0) == 1
         reversePlayback = ply:GetInfoNum("actionrecorder_reverseplayback", 0) == 1
         unpauseInReverse = ply:GetInfoNum("actionrecorder_unpauseinreverse", 0) == 1
         activation_mode = ply:GetInfoNum("actionrecorder_activation_mode", 0)
@@ -420,7 +425,7 @@ function TOOL:RightClick(trace)
         found_box_owned:UpdateSettings(
             speed, loop, playbackType, model, boxid, soundpath,
             easing, easing_amplitude, easing_frequency, easing_invert, easing_offset,
-            physicsless, freezeonend, reversePlayback, activation_mode, unpauseInReverse
+            physicsless, freezeonend, freezeonpause, reversePlayback, activation_mode, unpauseInReverse
         )
         found_box_owned.NumpadKey = key
         found_box_owned:SetPhysicslessTeleport(physicsless)
@@ -460,7 +465,7 @@ function TOOL:RightClick(trace)
     ent:SetPlaybackData(ply.ActionRecordData, ply.ActionRecordEntsData)
     ent:SetPlaybackSettings(
         speed, loop, playbackType,
-        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback, activation_mode, unpauseInReverse
+        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, freezeonpause, reversePlayback, activation_mode, unpauseInReverse
     )
     ent:SetModelPath(model)
     ent:SetBoxID(boxid)
@@ -634,9 +639,22 @@ function TOOL.BuildCPanel(panel)
     generalSettingsForm:TextEntry("Activation Sound", "actionrecorder_soundpath")
 	generalSettingsForm:CheckBox("Freeze End(NO LOOP Only)", "actionrecorder_freezeonend")
     generalSettingsForm:CheckBox("Physicsless Teleport", "ar_physicsless_teleport")
+    generalSettingsForm:CheckBox("Freeze On Pause", "actionrecorder_freezeonpause")
+
+    local activateLabel = vgui.Create("DLabel", generalSettingsForm)
+    activateLabel:SetText("Activate")
+    generalSettingsForm:AddItem(activateLabel)
+
     local keyBinder = vgui.Create("DBinder")
     keyBinder:SetConVar("actionrecorder_key")
     generalSettingsForm:AddItem(keyBinder)
+
+    local pauseLabel = vgui.Create("DLabel", generalSettingsForm)
+    pauseLabel:SetText("Pause/Unpause")
+    generalSettingsForm:AddItem(pauseLabel)
+    local pauseKeyBinder = vgui.Create("DBinder")
+    pauseKeyBinder:SetConVar("actionrecorder_pausekey")
+    generalSettingsForm:AddItem(pauseKeyBinder)
 	
 	local colorPickerButton = vgui.Create("DButton", generalSettingsForm)
     colorPickerButton:SetText("Change Label Color")

@@ -37,6 +37,7 @@ function ENT:Initialize()
     self.NextTeleportTime = nil
     self.Paused = false
     self.UnpauseInReverse = false
+    self.FreezeOnPause = false
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
         self:SetNWInt("Status", self.status)
@@ -119,7 +120,7 @@ function ENT:SetPlaybackData(data, entitiesConstants)
     if SERVER then self:SetNWInt("Status", self.status) end
 end
 
-function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
+function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, freezeOnPause, reversePlayback, activation_mode, unpauseInReverse)
     self.PlaybackSpeed = speed or 1
     self.LoopMode = loopMode or AR_LOOP_MODE.NO_LOOP
     self.PlaybackType = playbackType or AR_PLAYBACK_TYPE.ABSOLUTE
@@ -130,6 +131,7 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     self.EasingOffset = easing_offset or 0
     self.ReversePlayback = reversePlayback or false -- Directly use the passed parameter
     self.freezeOnEnd = freezeOnEnd or false
+    self.FreezeOnPause = freezeOnPause or false
     self.ActivationMode = activation_mode or AR_ACTIVATION_MODE.PLAY_RESET
     self.UnpauseInReverse = unpauseInReverse or false
 
@@ -160,9 +162,9 @@ function ENT:SetPhysicslessTeleport(state)
     if SERVER then self:SetNWBool("PhysicslessTeleport", self.PhysicslessTeleport) end
 end
 
-function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
+function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, freezeOnPause, reversePlayback, activation_mode, unpauseInReverse)
     self:StopPlayback(true)
-    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
+    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, freezeOnPause, reversePlayback, activation_mode, unpauseInReverse)
     self:SetModelPath(model)
     self:SetBoxID(boxid)
     self:SetSoundPath(soundpath)
@@ -180,7 +182,33 @@ function ENT:TogglePause()
         self:SetNWBool("Paused", self.Paused)
     end
 
-    if not self.Paused then -- unpausing
+    if self.Paused then -- pausing
+        self:EmitSound("buttons/button15.wav") -- Pause sound
+        if self.FreezeOnPause then
+            for entIndex, _ in pairs(self.PlaybackData or {}) do
+                local ent = Entity(entIndex)
+                if IsValid(ent) then
+                    local phys = ent:GetPhysicsObject()
+                    if IsValid(phys) then
+                        phys:EnableMotion(false)
+                    end
+                end
+            end
+        end
+    else -- unpausing
+        self:EmitSound("buttons/button24.wav") -- Unpause sound
+        if self.FreezeOnPause then
+            for entIndex, _ in pairs(self.PlaybackData or {}) do
+                local ent = Entity(entIndex)
+                if IsValid(ent) then
+                    local phys = ent:GetPhysicsObject()
+                    if IsValid(phys) then
+                        phys:EnableMotion(true)
+                    end
+                end
+            end
+        end
+
         if self.UnpauseInReverse then
             for _, info in pairs(self.AnimationInfo) do
                 info.direction = info.direction * -1
