@@ -133,7 +133,7 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     if SERVER then
         -- Update networked variables
         self:SetNWInt("LoopMode", self.LoopMode)
-        self:SetNWInt("ActivationMode", self.ActivationMode)
+        --self:SetNWInt("ActivationMode", self.ActivationMode)
     end
 end
 
@@ -171,24 +171,21 @@ function ENT:Use(activator, caller)
     if not self.PlaybackData then return end
     self:EmitSound(self.SoundPath or "buttons/button3.wav")
 
-    local activationMode = GetConVar("actionrecorder_activation_mode"):GetInt()
-    self.ActivationMode = activationMode -- Update member variable
-
-    if activationMode == AR_ACTIVATION_MODE.PLAY_RESET then
+    if self.ActivationMode == AR_ACTIVATION_MODE.PLAY_RESET then
         self:StartPlayback(true)
-    elseif activationMode == AR_ACTIVATION_MODE.PLAY_STOP then
+    elseif self.ActivationMode == AR_ACTIVATION_MODE.PLAY_STOP then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(true)
         else
             self:StartPlayback(false)
         end
-    
-    elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
+
+    elseif self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS then
         -- Toggle explicit direction flag for this mode
         self.ShouldPlayBackwards = not (self.ShouldPlayBackwards or false) -- Initialize to false if nil
         self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
         self:StartPlayback(false)
-    elseif activationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
+    elseif self.ActivationMode == AR_ACTIVATION_MODE.FORWARDS_BACKWARDS_STOP then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(false)
         else
@@ -197,7 +194,7 @@ function ENT:Use(activator, caller)
             self.LoopMode = AR_LOOP_MODE.NO_LOOP -- Force no loop for this mode
             self:StartPlayback(false)
         end
-    elseif activationMode == AR_ACTIVATION_MODE.TELEPORT then
+    elseif self.ActivationMode == AR_ACTIVATION_MODE.TELEPORT then
         if self.status == AR_ANIMATION_STATUS.PLAYING then
             self:StopPlayback(false) -- Stop if currently playing
         else
