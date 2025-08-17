@@ -28,6 +28,7 @@ if SERVER then
     CreateConVar("actionrecorder_labelcolor_a", "255", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 	CreateConVar("actionrecorder_labelcolor_rainbow", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 	    CreateConVar("actionrecorder_reverseplayback", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
+    CreateConVar("actionrecorder_unpauseinreverse", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
     CreateConVar("actionrecorder_activation_mode", "0", { FCVAR_ARCHIVE, FCVAR_REPLICATED })
 else
     CreateClientConVar("actionrecorder_playbackspeed", "1", true, true)
@@ -50,6 +51,7 @@ else
     CreateClientConVar("actionrecorder_labelcolor_a", "255", true, false)
 	CreateClientConVar("actionrecorder_labelcolor_rainbow", "0", true, false)
 	CreateClientConVar("actionrecorder_reverseplayback", "0", true, true)
+	CreateClientConVar("actionrecorder_unpauseinreverse", "0", true, true)
 	CreateClientConVar("actionrecorder_activation_mode", "0", true, true)
 end
 
@@ -331,7 +333,7 @@ function TOOL:RightClick(trace)
     local easing, easing_amplitude, easing_frequency, easing_invert, easing_offset
     local physicsless, freezeonend
     local label_r, label_g, label_b, label_a, label_rainbow
-    local reversePlayback, activation_mode
+    local reversePlayback, activation_mode, unpauseInReverse
 
     -- Global settings are only used on a listen server (not dedicated), when global mode is on, and for the host (admin).
     local useGlobalSettings = not isDedicated and globalMode and ply:IsAdmin()
@@ -351,6 +353,7 @@ function TOOL:RightClick(trace)
         easing_offset = GetConVar("actionrecorder_easing_offset"):GetFloat()
         freezeonend = GetConVar("actionrecorder_freezeonend"):GetBool()
         reversePlayback = GetConVar("actionrecorder_reverseplayback"):GetBool()
+        unpauseInReverse = GetConVar("actionrecorder_unpauseinreverse"):GetBool()
         activation_mode = GetConVar("actionrecorder_activation_mode"):GetInt()
     else
         -- Everyone on a dedicated server, or non-admins on a listen server, use their own settings
@@ -367,6 +370,7 @@ function TOOL:RightClick(trace)
         easing_offset = ply:GetInfoNum("actionrecorder_easing_offset", 0)
         freezeonend = ply:GetInfoNum("actionrecorder_freezeonend", 0) == 1
         reversePlayback = ply:GetInfoNum("actionrecorder_reverseplayback", 0) == 1
+        unpauseInReverse = ply:GetInfoNum("actionrecorder_unpauseinreverse", 0) == 1
         activation_mode = ply:GetInfoNum("actionrecorder_activation_mode", 0)
     end
 
@@ -416,7 +420,7 @@ function TOOL:RightClick(trace)
         found_box_owned:UpdateSettings(
             speed, loop, playbackType, model, boxid, soundpath,
             easing, easing_amplitude, easing_frequency, easing_invert, easing_offset,
-            physicsless, freezeonend, reversePlayback, activation_mode
+            physicsless, freezeonend, reversePlayback, activation_mode, unpauseInReverse
         )
         found_box_owned.NumpadKey = key
         found_box_owned:SetPhysicslessTeleport(physicsless)
@@ -456,7 +460,7 @@ function TOOL:RightClick(trace)
     ent:SetPlaybackData(ply.ActionRecordData, ply.ActionRecordEntsData)
     ent:SetPlaybackSettings(
         speed, loop, playbackType,
-        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback, activation_mode
+        easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeonend, reversePlayback, activation_mode, unpauseInReverse
     )
     ent:SetModelPath(model)
     ent:SetBoxID(boxid)
@@ -601,6 +605,7 @@ function TOOL.BuildCPanel(panel)
     colorHeader(generalSettingsForm, color_red)
     generalSettingsForm:NumSlider("Playback Speed", "actionrecorder_playbackspeed", 0, 50, 2):SetDecimals(2)
     generalSettingsForm:CheckBox("Reverse Playback", "actionrecorder_reverseplayback")
+    generalSettingsForm:CheckBox("Unpause in reverse", "actionrecorder_unpauseinreverse")
     local loop_combo = generalSettingsForm:ComboBox("Loop Mode", "actionrecorder_loop")
     loop_combo:AddChoice("No Loop", 0, true)
     loop_combo:AddChoice("Loop", 1)
@@ -735,6 +740,7 @@ function TOOL:GetSetConVars(ply)
 		"actionrecorder_labelcolor_a",
 		"actionrecorder_labelcolor_rainbow",
 		"actionrecorder_reverseplayback",
+        "actionrecorder_unpauseinreverse",
     }
 
     local settings = {}

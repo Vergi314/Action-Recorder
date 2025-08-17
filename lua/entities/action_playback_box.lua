@@ -35,9 +35,12 @@ function ENT:Initialize()
     self.TeleportToEnd = false -- New flag for Teleport mode
     self.ActivationMode = AR_ACTIVATION_MODE.PLAY_RESET
     self.NextTeleportTime = nil
+    self.Paused = false
+    self.UnpauseInReverse = false
     if SERVER and not self:GetNWString("OwnerName", nil) then self:SetNWString("OwnerName", "Unknown") end
     if SERVER then
         self:SetNWInt("Status", self.status)
+        self:SetNWBool("Paused", self.Paused)
         self:SetNWInt("ActivationMode", self.ActivationMode)
         self:SetupNumpad()
         ActionRecorder.Wire.SetupEntity(self)
@@ -116,7 +119,7 @@ function ENT:SetPlaybackData(data, entitiesConstants)
     if SERVER then self:SetNWInt("Status", self.status) end
 end
 
-function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
+function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
     self.PlaybackSpeed = speed or 1
     self.LoopMode = loopMode or AR_LOOP_MODE.NO_LOOP
     self.PlaybackType = playbackType or AR_PLAYBACK_TYPE.ABSOLUTE
@@ -128,6 +131,7 @@ function ENT:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_a
     self.ReversePlayback = reversePlayback or false -- Directly use the passed parameter
     self.freezeOnEnd = freezeOnEnd or false
     self.ActivationMode = activation_mode or AR_ACTIVATION_MODE.PLAY_RESET
+    self.UnpauseInReverse = unpauseInReverse or false
 
     
 
@@ -156,9 +160,9 @@ function ENT:SetPhysicslessTeleport(state)
     if SERVER then self:SetNWBool("PhysicslessTeleport", self.PhysicslessTeleport) end
 end
 
-function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
+function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpath, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
     self:StopPlayback(true)
-    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode)
+    self:SetPlaybackSettings(speed, loopMode, playbackType, easing, easing_amplitude, easing_frequency, easing_invert, easing_offset, physicsless, freezeOnEnd, reversePlayback, activation_mode, unpauseInReverse)
     self:SetModelPath(model)
     self:SetBoxID(boxid)
     self:SetSoundPath(soundpath)
@@ -168,8 +172,36 @@ function ENT:UpdateSettings(speed, loopMode, playbackType, model, boxid, soundpa
     self:StartPlayback()
 end
 
+function ENT:TogglePause()
+    if self.status ~= AR_ANIMATION_STATUS.PLAYING and not self.Paused then return end
+
+    self.Paused = not self.Paused
+    if SERVER then
+        self:SetNWBool("Paused", self.Paused)
+    end
+
+    if not self.Paused then -- unpausing
+        if self.UnpauseInReverse then
+            for _, info in pairs(self.AnimationInfo) do
+                info.direction = info.direction * -1
+            end
+        end
+        -- To make sure the playback continues smoothly
+        self.LastFrameTime = CurTime()
+        for _, info in pairs(self.AnimationInfo) do
+            info.LastMoveTime = CurTime()
+        end
+    end
+end
+
 function ENT:Use(activator, caller)
     if not self.PlaybackData then return end
+
+    if activator:IsPlayer() and activator:KeyDown(IN_WALK) then
+        self:TogglePause()
+        return
+    end
+
     self:EmitSound(self.SoundPath or "buttons/button3.wav")
 
     if self.ActivationMode == AR_ACTIVATION_MODE.PLAY_RESET then
@@ -676,6 +708,7 @@ function changeKey(oldKey, newKey, targetTable)
 end
 
 function ENT:ProcessPlayback()
+    if self.Paused then return end
     if self.status == AR_ANIMATION_STATUS.SMOOTH_RETURN then
         self:ProcessSmoothReturn()
         return
@@ -908,7 +941,10 @@ if CLIENT then
 
         -- Play/Stop Icon
         local status = self:GetNWInt("Status", AR_ANIMATION_STATUS.NOT_STARTED)
-        if status == AR_ANIMATION_STATUS.PLAYING then
+        local paused = self:GetNWBool("Paused", false)
+        if paused then
+            statusIconPath = "icon16/control_pause_blue.png"
+        elseif status == AR_ANIMATION_STATUS.PLAYING then
             statusIconPath = "icon16/control_play_blue.png"
         else
             statusIconPath = "icon16/control_stop_blue.png"
