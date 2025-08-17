@@ -381,6 +381,7 @@ function TOOL:RightClick(trace)
 
     -- These settings are always per-player
     key = ply:GetInfoNum("actionrecorder_key", 5)
+    pausekey = ply:GetInfoNum("actionrecorder_pausekey", 0)
     physicsless = ply:GetInfoNum("ar_physicsless_teleport", 0) == 1
 
     -- Label color is always per-player
@@ -428,6 +429,7 @@ function TOOL:RightClick(trace)
             physicsless, freezeonend, freezeonpause, reversePlayback, activation_mode, unpauseInReverse
         )
         found_box_owned.NumpadKey = key
+        found_box_owned.NumpadKeyPause = pausekey
         found_box_owned:SetPhysicslessTeleport(physicsless)
         found_box_owned:SetNWBool("FreezeOnEnd", freezeonend)
 
@@ -472,6 +474,7 @@ function TOOL:RightClick(trace)
     ent:SetOwner(ply)
     ent:SetOwnerName(ply:Nick() or "Unknown")
     ent.NumpadKey = key
+    ent.NumpadKeyPause = pausekey
     ent:SetSoundPath(soundpath)
     ent:SetPhysicslessTeleport(physicsless)
     ent:SetNWBool("FreezeOnEnd", freezeonend)
@@ -610,7 +613,7 @@ function TOOL.BuildCPanel(panel)
     colorHeader(generalSettingsForm, color_red)
     generalSettingsForm:NumSlider("Playback Speed", "actionrecorder_playbackspeed", 0, 50, 2):SetDecimals(2)
     generalSettingsForm:CheckBox("Reverse Playback", "actionrecorder_reverseplayback")
-    generalSettingsForm:CheckBox("Unpause in reverse", "actionrecorder_unpauseinreverse")
+    generalSettingsForm:CheckBox("Unpause In Reverse", "actionrecorder_unpauseinreverse")
     local loop_combo = generalSettingsForm:ComboBox("Loop Mode", "actionrecorder_loop")
     loop_combo:AddChoice("No Loop", 0, true)
     loop_combo:AddChoice("Loop", 1)
@@ -643,6 +646,7 @@ function TOOL.BuildCPanel(panel)
 
     local activateLabel = vgui.Create("DLabel", generalSettingsForm)
     activateLabel:SetText("Activate")
+    activateLabel:SetTextColor(Color(0, 0, 0))
     generalSettingsForm:AddItem(activateLabel)
 
     local keyBinder = vgui.Create("DBinder")
@@ -651,6 +655,7 @@ function TOOL.BuildCPanel(panel)
 
     local pauseLabel = vgui.Create("DLabel", generalSettingsForm)
     pauseLabel:SetText("Pause/Unpause")
+    pauseLabel:SetTextColor(Color(0, 0, 0))
     generalSettingsForm:AddItem(pauseLabel)
     local pauseKeyBinder = vgui.Create("DBinder")
     pauseKeyBinder:SetConVar("actionrecorder_pausekey")

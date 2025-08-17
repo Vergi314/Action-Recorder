@@ -27,6 +27,7 @@ function ENT:Initialize()
     self.lastStatus = AR_ANIMATION_STATUS.NOT_STARTED
     self.BoxID = "Box"
     self.NumpadKey = self.NumpadKey or 5
+    self.NumpadKeyPause = self.NumpadKeyPause or 0
     self.IsActivated = false
     self.ShouldSmoothReturn = false
     self.PhysicslessTeleport = false
@@ -50,19 +51,29 @@ function ENT:Initialize()
 end
 
 function ENT:SetupNumpad()
-    if not IsValid(self:GetOwner()) or not self.NumpadKey then return end
+    if not IsValid(self:GetOwner()) then return end
+
     if self.NumpadBind then
         numpad.Remove(self.NumpadBind)
         self.NumpadBind = nil
     end
-
     if self.NumpadUpBind then
         numpad.Remove(self.NumpadUpBind)
         self.NumpadUpBind = nil
     end
+    if self.NumpadPauseBind then
+        numpad.Remove(self.NumpadPauseBind)
+        self.NumpadPauseBind = nil
+    end
 
-    self.NumpadBind = numpad.OnDown(self:GetOwner(), self.NumpadKey, "ActionRecorder_Playback", self)
-    self.NumpadUpBind = numpad.OnUp(self:GetOwner(), self.NumpadKey, "ActionRecorder_Playback_Release", self)
+    if self.NumpadKey and self.NumpadKey > 0 then
+        self.NumpadBind = numpad.OnDown(self:GetOwner(), self.NumpadKey, "ActionRecorder_Playback", self)
+        self.NumpadUpBind = numpad.OnUp(self:GetOwner(), self.NumpadKey, "ActionRecorder_Playback_Release", self)
+    end
+
+    if self.NumpadKeyPause and self.NumpadKeyPause > 0 then
+        self.NumpadPauseBind = numpad.OnDown(self:GetOwner(), self.NumpadKeyPause, "ActionRecorder_TogglePause_Key", self)
+    end
 end
 
 function ENT:OnRemove()
@@ -71,10 +82,13 @@ function ENT:OnRemove()
         numpad.Remove(self.NumpadBind)
         self.NumpadBind = nil
     end
-
     if self.NumpadUpBind then
         numpad.Remove(self.NumpadUpBind)
         self.NumpadUpBind = nil
+    end
+    if self.NumpadPauseBind then
+        numpad.Remove(self.NumpadPauseBind)
+        self.NumpadPauseBind = nil
     end
 end
 
@@ -1019,6 +1033,13 @@ if SERVER then
         if not IsValid(ent) then return end
         if ent:GetNWString("OwnerName", "") ~= ply:Nick() then return end
     end)
+
+numpad.Register("ActionRecorder_TogglePause_Key", function(ply, ent)
+    if not IsValid(ply) or not IsValid(ent) then return end
+    if ent:GetClass() ~= "action_playback_box" then return end
+    if ent:GetOwner() ~= ply then return end
+    ent:TogglePause()
+end)
 
     if WireLib then duplicator.RegisterEntityClass("action_playback_box", WireLib.MakeWireEnt, "Data") end
 end
